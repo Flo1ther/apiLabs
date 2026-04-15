@@ -1,41 +1,38 @@
-from fastapi import APIRouter, HTTPException, status
-from uuid import UUID
-from typing import List, Optional
-
-from schemas.book import Book, BookCreate
-from services import book_service
+from fastapi import APIRouter, Depends, Query, status
+from sqlalchemy.ext.asyncio import AsyncSession
+from db.database import get_session
+from services.book_service import BookService
+from repository.book_repository import BookRepository
+from schemas.book import BookCreate, BookResponse
+from typing import List
 
 router = APIRouter(prefix="/books", tags=["Books"])
 
-
-@router.get("/", response_model=List[Book])
-async def get_books(status: Optional[str] = None,
-                    author: Optional[str] = None,
-                    sort_by: Optional[str] = None):
-
-    return await book_service.list_books(status, author, sort_by)
-
-
-@router.get("/{book_id}", response_model=Book)
-async def get_book(book_id: UUID):
-
-    book = await book_service.get_book(book_id)
-
-    if not book:
-        raise HTTPException(status_code=404, detail="Book not found")
-
-    return book
+@router.get("", response_model=List[BookResponse])
+async def get_books(
+    limit: int = Query(10, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    status: str | None = None,
+    author: str | None = None,
+    sort_by: str | None = Query(None, pattern="^(title|year)$"),
+    session: AsyncSession = Depends(get_session),
+):
+    repo = BookRepository()
+    return await repo.get_all(session, limit, offset, status, author, sort_by)
 
 
-@router.post("/", response_model=Book, status_code=status.HTTP_201_CREATED)
-async def create_book(book: BookCreate):
-
-    return await book_service.create_book(book)
-
+@router.post("", response_model=BookResponse, status_code=status.HTTP_201_CREATED)
+async def create_book(
+    data: BookCreate,
+    session: AsyncSession = Depends(get_session),
+):
+    service = BookService()
+    return await service.create_book(session, data)
 
 @router.delete("/{book_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_book(book_id: UUID):
-
-    await book_service.delete_book(book_id)
-
-    return
+async def delete_book(
+    book_id: str,
+    session: AsyncSession = Depends(get_session),
+):
+    repo = BookRepository()
+    await repo.delete(session, book_id)

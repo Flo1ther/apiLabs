@@ -1,26 +1,41 @@
-from models.book_model import books_storage
-from uuid import UUID
+from sqlalchemy import select, delete
+from sqlalchemy.ext.asyncio import AsyncSession
+from models.book_model import Book
 
+class BookRepository:
 
-async def get_all_books():
-    return books_storage
+    async def get_all(
+        self,
+        session: AsyncSession,
+        limit: int,
+        offset: int,
+        status: str | None,
+        author: str | None,
+        sort_by: str | None
+    ):
+        stmt = select(Book)
 
+        if status:
+            stmt = stmt.where(Book.status == status)
+        if author:
+            stmt = stmt.where(Book.author == author)
 
-async def get_book_by_id(book_id: UUID):
-    for book in books_storage:
-        if book["id"] == book_id:
-            return book
-    return None
+        if sort_by == "title":
+            stmt = stmt.order_by(Book.title)
+        elif sort_by == "year":
+            stmt = stmt.order_by(Book.year)
 
+        stmt = stmt.limit(limit).offset(offset)
 
-async def add_book(book: dict):
-    books_storage.append(book)
-    return book
+        result = await session.execute(stmt)
+        return result.scalars().all()
 
+    async def create(self, session: AsyncSession, book: Book):
+        session.add(book)
+        await session.commit()
+        await session.refresh(book)
+        return book
 
-async def delete_book(book_id: UUID):
-    for book in books_storage:
-        if book["id"] == book_id:
-            books_storage.remove(book)
-            return True
-    return False
+    async def delete(self, session: AsyncSession, book_id: str):
+        await session.execute(delete(Book).where(Book.id == book_id))
+        await session.commit()

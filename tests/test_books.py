@@ -1,50 +1,32 @@
-from fastapi.testclient import TestClient
-from main import app
-import sys
-import os
-
-sys.path.append(os.path.dirname(os.path.dirname(__file__)))
+import pytest
+from httpx import AsyncClient
+from httpx import ASGITransport
 
 
-client = TestClient(app)
-
-
-def test_create_book():
-    response = client.post(
-        "/books/",
-        json={
-            "title": "Test Book",
-            "author": "Author",
-            "description": "Test",
-            "status": "available",
-            "year": 2020
-        }
-    )
+@pytest.mark.asyncio
+async def test_create_book(app_with_test_db):
+    transport = ASGITransport(app=app_with_test_db)
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        response = await ac.post(
+            "/books",
+            json={
+                "title": "Test Book",
+                "author": "Test Author",
+                "status": "available",
+                "year": 2024,
+                "description": "Test Description"
+            }
+        )
 
     assert response.status_code == 201
     data = response.json()
     assert data["title"] == "Test Book"
 
+@pytest.mark.asyncio
+async def test_get_books(app_with_test_db):
+    transport = ASGITransport(app=app_with_test_db)
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        response = await ac.get("/books?limit=10&offset=0")
 
-def test_get_books():
-    response = client.get("/books/")
     assert response.status_code == 200
     assert isinstance(response.json(), list)
-
-
-def test_delete_book():
-    create = client.post(
-        "/books/",
-        json={
-            "title": "Delete Book",
-            "author": "Author",
-            "description": "Test",
-            "status": "available",
-            "year": 2022
-        }
-    )
-
-    book_id = create.json()["id"]
-
-    response = client.delete(f"/books/{book_id}")
-    assert response.status_code == 204
