@@ -1,41 +1,45 @@
-from models.book_model import Book
+from fastapi import APIRouter, HTTPException, Depends
+from motor.motor_asyncio import AsyncIOMotorDatabase
+from schemas.book import BookCreate, BookResponse
+from services.book_service import BookService
 from repository.book_repository import BookRepository
-from schemas.book import BookCreate
+from typing import List
 
+router = APIRouter(prefix="/books", tags=["books"])
 
-class BookService:
-    def __init__(self):
-        self.repo = BookRepository()
+def get_book_service(db: AsyncIOMotorDatabase = Depends()) -> BookService:
+    """Отримати сервіс книг"""
+    repository = BookRepository(db)
+    return BookService(repository)
 
-    async def create_book(self, session, data: BookCreate):
-        book = Book(**data.model_dump())
-        return await self.repo.create(session, book)
+@router.post("/", response_model=BookResponse, status_code=201)
+async def create_book(book: BookCreate, service: BookService = Depends(get_book_service)):
+    """Створити нову книгу"""
+    return await service.create_book(book)
 
-    async def get_books(
-            self,
-            session,
-            cursor: str | None = None,
-            limit: int = 10,
-            status: str | None = None,
-            author: str | None = None,
-            sort_by: str | None = None
-    ):
-        books, has_more = await self.repo.get_all(
-            session=session,
-            cursor=cursor,
-            limit=limit,
-            status=status,
-            author=author,
-            sort_by=sort_by
-        )
+@router.get("/", response_model=List[BookResponse])
+async def get_books(service: BookService = Depends(get_book_service)):
+    """Отримати всі книги"""
+    return await service.get_all_books()
 
-        # Get the next cursor from the last book
-        next_cursor = None
-        if books and has_more:
-            next_cursor = books[-1].created_at.isoformat()
+@router.get("/{book_id}", response_model=BookResponse)
+async def get_book(book_id: str, service: BookService = Depends(get_book_service)):
+    """Отримати книгу по ID"""
+    book = await service.get_book(book_id)
+    if not book:
+        raise HTTPException(status_code=404, detail="Книга не знайдена")
+    return book
 
-        return {
-            "data": books,
-            "cursor": next_cursor,
-            "has_more": has_more
-        }
+@router.put("/{book_id}", response_model=BookResponse)
+async def update_book(book_id: str, book: BookCreate, service: BookService = Depends(get_book_service)):
+    """Оновити книгу"""
+    updated = await service.update_book(book_id, book)
+    if not updated:
+        raise HTTPException(status_code=404, detail="Книга не знайдена")
+    return updated
+
+@router.delete("/{book_id}", status_code=204)
+async def delete_book(book_id: str, service: BookService = Depends(get_book_service)):
+    """Видалити книгу"""
+    if not await service.delete_book(book_id):
+        raise HTTPException(status_code=404, detail="Книга не знайдена")

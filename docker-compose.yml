@@ -1,28 +1,26 @@
-version: "3.9"
-
 services:
-  db:
-    image: postgres:15
-    container_name: books_db
+  mongo:
+    image: mongo:latest
+    container_name: mongodb
     environment:
-      POSTGRES_DB: library
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
+      MONGO_INITDB_ROOT_USERNAME: mongo_admin
+      MONGO_INITDB_ROOT_PASSWORD: password
+      MONGO_INITDB_DATABASE: books_db
     ports:
-      - "5432:5432"
+      - "27017:27017"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - mongo_data:/data/db
 
   api:
     build: .
-    container_name: books_api
-    command: uvicorn main:app --host 0.0.0.0 --port 8000
+    container_name: fastapi_app
     ports:
       - "8000:8000"
     depends_on:
-      - db
+      - mongo
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
     environment:
-      DATABASE_URL: postgresql+asyncpg://postgres:postgres@db:5432/library
+      - MONGODB_URL=mongodb://mongo_admin:password@mongo:27017
 
 volumes:
-  postgres_data:
+  mongo_data:

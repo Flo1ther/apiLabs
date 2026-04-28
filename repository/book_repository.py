@@ -1,69 +1,61 @@
-from sqlalchemy import select, delete, and_
-from sqlalchemy.ext.asyncio import AsyncSession
-from models.book_model import Book
-from datetime import datetime
+from motor.motor_asyncio import AsyncIOMotorDatabase
+from schemas.book import BookCreate, BookResponse
+from typing import List, Optional
+from bson import ObjectId
 
 
 class BookRepository:
+    """Репозиторій для роботи з книгами в MongoDB"""
 
-    async def get_all(
-            self,
-            session: AsyncSession,
-            cursor: str | None = None,
-            limit: int = 10,
-            status: str | None = None,
-            author: str | None = None,
-            sort_by: str | None = None
-    ):
-        """
-        Get books with cursor-based pagination.
+    def __init__(self, db: AsyncIOMotorDatabase):
+        self.db = db
+        self.collection = db.books
 
-        Args:
-            cursor: ISO format datetime string of the last book's created_at (for next page)
-            limit: Number of items to return
-            status: Filter by status
-            author: Filter by author
-            sort_by: Sort field (title or year)
-        """
-        stmt = select(Book)
+    async def create(self, book: BookCreate) -> BookResponse:
+        """Створити нову книгу"""
+        book_dict = book.dict()
+        result = await self.collection.insert_one(book_dict)
+        book_dict["_id"] = str(result.inserted_id)
+        return BookResponse(**book_dict)
 
-        if status:
-            stmt = stmt.where(Book.status == status)
-        if author:
-            stmt = stmt.where(Book.author == author)
+    async def get_all(self) -> List[BookResponse]:
+        """Отримати всі книги"""
+        books = await self.collection.find({}).to_list(None)
+        return [BookResponse(_id=str(book["_id"]), **{k: v for k, v in book.items() if k != "_id"})
+                for book in books]
 
-        # Apply cursor filtering (get books created after the cursor)
-        if cursor:
-            cursor_datetime = datetime.fromisoformat(cursor)
-            stmt = stmt.where(Book.created_at > cursor_datetime)
+    async def get_by_id(self, book_id: str) -> Optional[BookResponse]:
+        """Отримати книгу за ID"""
+        try:
+            obj_id = ObjectId(book_id)
+            book = await self.collection.find_one({"_id": obj_id})
+            if book:
+                return BookResponse(_id=str(book["_id"]), **{k: v for k, v in book.items() if k != "_id"})
+        except Exception as e:
+            print(f"Помилка при отриманні книги: {e}")
+        return None
 
-        # Sorting
-        if sort_by == "title":
-            stmt = stmt.order_by(Book.title)
-        elif sort_by == "year":
-            stmt = stmt.order_by(Book.year)
-        else:
-            stmt = stmt.order_by(Book.created_at)  # Default sort by creation time
+    async def update(self, book_id: str, book: BookCreate) -> Optional[BookResponse]:
+        """Оновити книгу"""
+        try:
+            obj_id = ObjectId(book_id)
+            result = await self.collection.find_one_and_update(
+                {"_id": obj_id},
+                {"$set": book.dict()},
+                return_document=True
+            )
+            if result:
+                return BookResponse(_id=str(result["_id"]), **{k: v for k, v in result.items() if k != "_id"})
+        except Exception as e:
+            print(f"Помилка при оновленні книги: {e}")
+        return None
 
-        # Get limit + 1 to determine if there are more results
-        stmt = stmt.limit(limit + 1)
-
-        result = await session.execute(stmt)
-        books = result.scalars().all()
-
-        # Check if there are more results
-        has_more = len(books) > limit
-        if has_more:
-            books = books[:limit]
-
-        return books, has_more
-
-    async def create(self, session: AsyncSession, book: Book):
-        session.add(book)
-        await session.commit()
-        await session.refresh(book)
-        return book
-
-    async def delete(self, session: AsyncSession, book_id: str):
-        await session.execute(delete(Book).where(Book.id == book_id))
-        await session.commit()
+    async def delete(self, book_id: str) -> bool:
+        """Видалити книгу"""
+        try:
+            obj_id = ObjectId(book_id)
+            response = await self.collection.delete_one({"_id": obj_id})
+            return response.deleted_count > 0
+        except Exception as e:
+            print(f"Помилка при видаленні книги: {e}")
+        return False

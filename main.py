@@ -1,23 +1,69 @@
-from contextlib import asynccontextmanager
 from fastapi import FastAPI
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
-from api.books import router
-from db.database import DATABASE_URL, engine
-from models.book_model import Base
+from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorDatabase
+from contextlib import asynccontextmanager
+from api.books import router as books_router
+
+MONGODB_URL = "mongodb://mongo_admin:password@localhost:27017"
+DATABASE_NAME = "books_db"
+
+client: AsyncIOMotorClient = None
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-    print("Database tables created")
+    # Startup
+    global client
+    try:
+        client = AsyncIOMotorClient(MONGODB_URL, serverSelectionTimeoutMS=5000)
+        await client.server_info()
+        print("✅ Підключено до MongoDB")
+    except Exception as e:
+        print(f"⚠️ Помилка підключення до MongoDB: {e}")
 
     yield
 
-    # Shutdown code
-    print("Application shutting down")
+    # Shutdown
+    if client:
+        client.close()
+        print("✅ MongoDB з'єднання закрито")
 
 
-app = FastAPI(lifespan=lifespan)
+app = FastAPI(
+    title="Books API",
+    description="CRUD API для управління книгами на MongoDB",
+    version="1.0.0",
+    lifespan=lifespan
+)
 
-app.include_router(router)
+
+def get_database() -> AsyncIOMotorDatabase:
+    """Отримати базу даних"""
+    if client is None:
+        raise Exception("MongoDB недоступна")
+    return client[DATABASE_NAME]
+
+
+app.dependency_overrides[AsyncIOMotorDatabase] = get_database
+app.include_router(books_router)
+
+
+@app.get("/health")
+async def health_check():
+    """Перевірка здоров'я API"""
+    try:
+        if client:
+            await client.server_info()
+            return {"status": "ok", "database": "connected"}
+    except:
+        pass
+    return {"status": "ok", "database": "disconnected"}
+
+
+@app.get("/")
+async def root():
+    """Корневий ендпоінт"""
+    return {
+        "message": "Ласкаво просимо до Books API",
+        "docs": "/docs",
+        "health": "/health"
+    }

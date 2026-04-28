@@ -1,35 +1,39 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy.ext.asyncio import AsyncSession
+from fastapi import APIRouter, HTTPException, Depends
+from motor.motor_asyncio import AsyncIOMotorDatabase
+from schemas.book import BookCreate, BookResponse
 from services.book_service import BookService
-from schemas.book import BookCreate, PaginatedBooksResponse, BookResponse
-from db.database import get_session
-from typing import Optional
+from repository.book_repository import BookRepository
+from typing import List
 
 router = APIRouter(prefix="/books", tags=["books"])
-service = BookService()
 
-@router.post("", status_code=201, response_model=BookResponse)
-async def create_book(
-    data: BookCreate,
-    session: AsyncSession = Depends(get_session)
-):
-    return await service.create_book(session, data)
+async def get_book_service(db: AsyncIOMotorDatabase = Depends(lambda: __import__('main').db)) -> BookService:
+    repository = BookRepository(db)
+    return BookService(repository)
 
-@router.get("", response_model=PaginatedBooksResponse)
-async def get_books(
-    cursor: Optional[str] = Query(None, description="Cursor for pagination (ISO format datetime)"),
-    limit: int = Query(10, ge=1, le=100, description="Number of items per page"),
-    status: Optional[str] = Query(None, description="Filter by status"),
-    author: Optional[str] = Query(None, description="Filter by author"),
-    sort_by: Optional[str] = Query(None, description="Sort by: title or year"),
-    session: AsyncSession = Depends(get_session)
-):
-    result = await service.get_books(
-        session=session,
-        cursor=cursor,
-        limit=limit,
-        status=status,
-        author=author,
-        sort_by=sort_by
-    )
-    return result
+@router.post("/", response_model=BookResponse, status_code=201)
+async def create_book(book: BookCreate, service: BookService = Depends(get_book_service)):
+    return await service.create_book(book)
+
+@router.get("/", response_model=List[BookResponse])
+async def get_books(service: BookService = Depends(get_book_service)):
+    return await service.get_all_books()
+
+@router.get("/{book_id}", response_model=BookResponse)
+async def get_book(book_id: str, service: BookService = Depends(get_book_service)):
+    book = await service.get_book(book_id)
+    if not book:
+        raise HTTPException(status_code=404, detail="Book not found")
+    return book
+
+@router.put("/{book_id}", response_model=BookResponse)
+async def update_book(book_id: str, book: BookCreate, service: BookService = Depends(get_book_service)):
+    updated = await service.update_book(book_id, book)
+    if not updated:
+        raise HTTPException(status_code=404, detail="Book not found")
+    return updated
+
+@router.delete("/{book_id}", status_code=204)
+async def delete_book(book_id: str, service: BookService = Depends(get_book_service)):
+    if not await service.delete_book(book_id):
+        raise HTTPException(status_code=404, detail="Book not found")
