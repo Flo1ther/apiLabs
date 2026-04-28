@@ -1,61 +1,59 @@
-from motor.motor_asyncio import AsyncIOMotorDatabase
-from schemas.book import BookCreate, BookResponse
-from typing import List, Optional
+from db.database import Database
+from models.book_model import Book
 from bson import ObjectId
+from typing import List, Optional
 
 
 class BookRepository:
-    """Репозиторій для роботи з книгами в MongoDB"""
 
-    def __init__(self, db: AsyncIOMotorDatabase):
-        self.db = db
-        self.collection = db.books
+    def __init__(self):
+        self.db = Database.get_db()
+        self.collection = self.db.books
 
-    async def create(self, book: BookCreate) -> BookResponse:
+    def create(self, book: Book) -> str:
         """Створити нову книгу"""
-        book_dict = book.dict()
-        result = await self.collection.insert_one(book_dict)
-        book_dict["_id"] = str(result.inserted_id)
-        return BookResponse(**book_dict)
+        result = self.collection.insert_one(book.to_dict())
+        return str(result.inserted_id)
 
-    async def get_all(self) -> List[BookResponse]:
+    def get_all(self) -> List[dict]:
         """Отримати всі книги"""
-        books = await self.collection.find({}).to_list(None)
-        return [BookResponse(_id=str(book["_id"]), **{k: v for k, v in book.items() if k != "_id"})
-                for book in books]
+        books = []
+        for book in self.collection.find():
+            book["_id"] = str(book["_id"])  # Конвертуємо ObjectId в строку
+            books.append(book)
+        return books
 
-    async def get_by_id(self, book_id: str) -> Optional[BookResponse]:
+    def get_by_id(self, book_id: str) -> Optional[dict]:
         """Отримати книгу за ID"""
         try:
             obj_id = ObjectId(book_id)
-            book = await self.collection.find_one({"_id": obj_id})
+            book = self.collection.find_one({"_id": obj_id})
             if book:
-                return BookResponse(_id=str(book["_id"]), **{k: v for k, v in book.items() if k != "_id"})
+                book["_id"] = str(book["_id"])
+                return book
         except Exception as e:
             print(f"Помилка при отриманні книги: {e}")
         return None
 
-    async def update(self, book_id: str, book: BookCreate) -> Optional[BookResponse]:
+    def update(self, book_id: str, book_data: dict) -> bool:
         """Оновити книгу"""
         try:
             obj_id = ObjectId(book_id)
-            result = await self.collection.find_one_and_update(
+            result = self.collection.update_one(
                 {"_id": obj_id},
-                {"$set": book.dict()},
-                return_document=True
+                {"$set": book_data}
             )
-            if result:
-                return BookResponse(_id=str(result["_id"]), **{k: v for k, v in result.items() if k != "_id"})
+            return result.modified_count > 0
         except Exception as e:
             print(f"Помилка при оновленні книги: {e}")
-        return None
+        return False
 
-    async def delete(self, book_id: str) -> bool:
+    def delete(self, book_id: str) -> bool:
         """Видалити книгу"""
         try:
             obj_id = ObjectId(book_id)
-            response = await self.collection.delete_one({"_id": obj_id})
-            return response.deleted_count > 0
+            result = self.collection.delete_one({"_id": obj_id})
+            return result.deleted_count > 0
         except Exception as e:
             print(f"Помилка при видаленні книги: {e}")
         return False

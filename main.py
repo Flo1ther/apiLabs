@@ -1,69 +1,42 @@
-from fastapi import FastAPI
-from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorDatabase
-from contextlib import asynccontextmanager
-from api.books import router as books_router
+from flask import Flask, jsonify
+from flask_restful import Api
+from flask_cors import CORS
+from flasgger import Flasgger
+from db.database import Database
+from api.books import BookList, BookDetail
+from config import Config
 
-MONGODB_URL = "mongodb://mongo_admin:password@localhost:27017"
-DATABASE_NAME = "books_db"
+app = Flask(__name__)
+app.config.from_object(Config)
 
-client: AsyncIOMotorClient = None
+CORS(app)
 
+swagger = Flasgger(app)
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    # Startup
-    global client
-    try:
-        client = AsyncIOMotorClient(MONGODB_URL, serverSelectionTimeoutMS=5000)
-        await client.server_info()
-        print("✅ Підключено до MongoDB")
-    except Exception as e:
-        print(f"⚠️ Помилка підключення до MongoDB: {e}")
+api = Api(app)
 
-    yield
+api.add_resource(BookList, "/api/books", endpoint="books")
+api.add_resource(BookDetail, "/api/books/<string:book_id>", endpoint="book")
 
-    # Shutdown
-    if client:
-        client.close()
-        print("✅ MongoDB з'єднання закрито")
-
-
-app = FastAPI(
-    title="Books API",
-    description="CRUD API для управління книгами на MongoDB",
-    version="1.0.0",
-    lifespan=lifespan
-)
-
-
-def get_database() -> AsyncIOMotorDatabase:
-    """Отримати базу даних"""
-    if client is None:
-        raise Exception("MongoDB недоступна")
-    return client[DATABASE_NAME]
-
-
-app.dependency_overrides[AsyncIOMotorDatabase] = get_database
-app.include_router(books_router)
-
-
-@app.get("/health")
-async def health_check():
-    """Перевірка здоров'я API"""
-    try:
-        if client:
-            await client.server_info()
-            return {"status": "ok", "database": "connected"}
-    except:
-        pass
-    return {"status": "ok", "database": "disconnected"}
-
-
-@app.get("/")
-async def root():
-    """Корневий ендпоінт"""
-    return {
+@app.route("/")
+def index():
+    return jsonify({
         "message": "Ласкаво просимо до Books API",
-        "docs": "/docs",
+        "docs": "/apidocs",
         "health": "/health"
-    }
+    })
+
+@app.route("/health")
+def health():
+    try:
+        Database.get_db()
+        return jsonify({"status": "ok", "database": "connected"}), 200
+    except:
+        return jsonify({"status": "ok", "database": "disconnected"}), 200
+
+@app.before_request
+def before_request():
+    Database.connect()
+
+if __name__ == "__main__":
+    app.run(debug=True, host="0.0.0.0", port=5000)

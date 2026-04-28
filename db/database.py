@@ -1,15 +1,33 @@
-import os
-from dotenv import load_dotenv
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
+from pymongo import MongoClient
+from config import Config
 
-load_dotenv()
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///./test.db")
-engine = create_async_engine(DATABASE_URL, echo=True)
 
-AsyncSessionLocal = async_sessionmaker(
-    engine, expire_on_commit=False, class_=AsyncSession
-)
+class Database:
+    client = None
+    db = None
 
-async def get_session() -> AsyncSession:
-    async with AsyncSessionLocal() as session:
-        yield session
+    @classmethod
+    def connect(cls):
+        """Підключитися до MongoDB"""
+        try:
+            cls.client = MongoClient(Config.MONGODB_URL)
+            cls.db = cls.client[Config.DATABASE_NAME]
+            # Перевіримо з'єднання
+            cls.client.server_info()
+            print("✅ Підключено до MongoDB")
+        except Exception as e:
+            print(f"❌ Помилка підключення до MongoDB: {e}")
+
+    @classmethod
+    def disconnect(cls):
+        """Відключитися від MongoDB"""
+        if cls.client:
+            cls.client.close()
+            print("✅ Відключено від MongoDB")
+
+    @classmethod
+    def get_db(cls):
+        """Отримати об'єкт бази даних"""
+        if cls.db is None:
+            cls.connect()
+        return cls.db
