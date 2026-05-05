@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, Query, status, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from db.database import get_session
 from services.book_service import BookService
@@ -7,6 +7,7 @@ from schemas.book import BookCreate, BookResponse
 from typing import List
 
 router = APIRouter(prefix="/books", tags=["Books"])
+
 
 @router.get("", response_model=List[BookResponse])
 async def get_books(
@@ -29,10 +30,17 @@ async def create_book(
     service = BookService()
     return await service.create_book(session, data)
 
+
 @router.delete("/{book_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_book(
     book_id: str,
     session: AsyncSession = Depends(get_session),
 ):
     repo = BookRepository()
-    await repo.delete(session, book_id)
+    deleted_count = await repo.delete(session, book_id)
+
+    if deleted_count == 0:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Book not found"
+        )

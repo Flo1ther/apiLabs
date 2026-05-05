@@ -2,6 +2,7 @@ from sqlalchemy import select, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 from models.book_model import Book
 
+
 class BookRepository:
 
     async def get_all(
@@ -37,5 +38,9 @@ class BookRepository:
         return book
 
     async def delete(self, session: AsyncSession, book_id: str):
-        await session.execute(delete(Book).where(Book.id == book_id))
+        result = await session.execute(
+            delete(Book).where(Book.id == book_id)
+        )
         await session.commit()
+
+        return result.rowcount

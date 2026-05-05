@@ -1,23 +1,43 @@
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
+
+from fastapi import FastAPI, Request, HTTPException
+from fastapi.responses import JSONResponse
+
 from api.books import router
-from db.database import DATABASE_URL, engine
+from db.database import engine
+from db.redis import redis_client
 from models.book_model import Base
+from services.rate_limiter import RateLimiter
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+
     print("Database tables created")
 
     yield
 
-    # Shutdown code
     print("Application shutting down")
 
 
 app = FastAPI(lifespan=lifespan)
+
+app.state.rate_limiter = RateLimiter(redis_client)
+
+
+@app.middleware("http")
+async def rate_limit_middleware(request: Request, call_next):
+    try:
+        await request.app.state.rate_limiter.check(request)
+        response = await call_next(request)
+        return response
+    except HTTPException as e:
+        return JSONResponse(
+            status_code=e.status_code,
+            content={"detail": e.detail},
+        )
+
 
 app.include_router(router)
