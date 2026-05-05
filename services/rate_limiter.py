@@ -7,6 +7,7 @@ EXCLUDED_PATHS = [
     "/openapi.json",
     "/redoc",
     "/favicon.ico",
+    "/books",
 ]
 
 
