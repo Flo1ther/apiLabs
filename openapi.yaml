@@ -1,0 +1,150 @@
+openapi: 3.0.3
+info:
+  title: Library API
+  version: 1.0.0
+  description: Mock API for library service
+
+servers:
+  - url: http://localhost:4010
+
+paths:
+  /books:
+    get:
+      summary: Get books
+      tags:
+        - Books
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            example: 10
+        - name: offset
+          in: query
+          required: false
+          schema:
+            type: integer
+            example: 0
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            example: available
+        - name: author
+          in: query
+          required: false
+          schema:
+            type: string
+            example: Test Author
+        - name: sort_by
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [title, year]
+      responses:
+        "200":
+          description: List of books
+          content:
+            application/json:
+              examples:
+                default:
+                  value:
+                    - id: "1"
+                      title: "Clean Code"
+                      author: "Robert Martin"
+                      description: "Programming best practices"
+                      status: "available"
+                      year: 2008
+                    - id: "2"
+                      title: "The Pragmatic Programmer"
+                      author: "Andrew Hunt"
+                      description: "Software craftsmanship"
+                      status: "available"
+                      year: 1999
+
+    post:
+      summary: Create book
+      tags:
+        - Books
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BookCreate"
+            example:
+              title: "Test Book"
+              author: "Test Author"
+              description: "Test Description"
+              status: "available"
+              year: 2024
+      responses:
+        "201":
+          description: Book created
+          content:
+            application/json:
+              example:
+                id: "80e9b060-1d3c-4ce7-b1ab-ff4ec0b94887"
+                title: "Test Book"
+                author: "Test Author"
+                description: "Test Description"
+                status: "available"
+                year: 2024
+
+  /books/{book_id}:
+    delete:
+      summary: Delete book
+      tags:
+        - Books
+      parameters:
+        - name: book_id
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "80e9b060-1d3c-4ce7-b1ab-ff4ec0b94887"
+      responses:
+        "204":
+          description: Book deleted successfully
+        "404":
+          description: Book not found
+          content:
+            application/json:
+              example:
+                detail: "Book not found"
+        "429":
+          description: Rate limit exceeded
+          content:
+            application/json:
+              example:
+                detail: "Rate limit exceeded"
+
+components:
+  schemas:
+    BookCreate:
+      type: object
+      required:
+        - title
+        - author
+        - status
+        - year
+      properties:
+        title:
+          type: string
+          example: "Test Book"
+        author:
+          type: string
+          example: "Test Author"
+        description:
+          type: string
+          nullable: true
+          example: "Test Description"
+        status:
+          type: string
+          example: "available"
+        year:
+          type: integer
+          example: 2024

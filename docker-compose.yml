@@ -32,5 +32,14 @@ services:
       DATABASE_URL: postgresql+asyncpg://postgres:postgres@db:5432/library
       REDIS_URL: redis://redis:6379/0
 
+  prism:
+    image: stoplight/prism:4
+    container_name: books_prism_mock
+    command: mock -h 0.0.0.0 -p 4010 /tmp/openapi.yaml
+    ports:
+      - "4010:4010"
+    volumes:
+      - ./openapi.yaml:/tmp/openapi.yaml:ro
+
 volumes:
   postgres_data:
