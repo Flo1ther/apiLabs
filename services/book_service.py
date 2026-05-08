@@ -1,45 +1,29 @@
-from fastapi import APIRouter, HTTPException, Depends
-from motor.motor_asyncio import AsyncIOMotorDatabase
-from schemas.book import BookCreate, BookResponse
-from services.book_service import BookService
 from repository.book_repository import BookRepository
-from typing import List
+from schemas.book import BookCreate, BookResponse
 
-router = APIRouter(prefix="/books", tags=["books"])
 
-def get_book_service(db: AsyncIOMotorDatabase = Depends()) -> BookService:
-    """Отримати сервіс книг"""
-    repository = BookRepository(db)
-    return BookService(repository)
+class BookService:
+    """Сервіс для управління книгами"""
 
-@router.post("/", response_model=BookResponse, status_code=201)
-async def create_book(book: BookCreate, service: BookService = Depends(get_book_service)):
-    """Створити нову книгу"""
-    return await service.create_book(book)
+    def __init__(self, repository: BookRepository):
+        self.repository = repository
 
-@router.get("/", response_model=List[BookResponse])
-async def get_books(service: BookService = Depends(get_book_service)):
-    """Отримати всі книги"""
-    return await service.get_all_books()
+    async def create_book(self, book: BookCreate) -> BookResponse:
+        """Створити нову книгу"""
+        return await self.repository.create(book)
 
-@router.get("/{book_id}", response_model=BookResponse)
-async def get_book(book_id: str, service: BookService = Depends(get_book_service)):
-    """Отримати книгу по ID"""
-    book = await service.get_book(book_id)
-    if not book:
-        raise HTTPException(status_code=404, detail="Книга не знайдена")
-    return book
+    async def get_all_books(self) -> list[BookResponse]:
+        """Отримати всі книги"""
+        return await self.repository.get_all()
 
-@router.put("/{book_id}", response_model=BookResponse)
-async def update_book(book_id: str, book: BookCreate, service: BookService = Depends(get_book_service)):
-    """Оновити книгу"""
-    updated = await service.update_book(book_id, book)
-    if not updated:
-        raise HTTPException(status_code=404, detail="Книга не знайдена")
-    return updated
+    async def get_book(self, book_id: str) -> BookResponse:
+        """Отримати книгу по ID"""
+        return await self.repository.get_by_id(book_id)
 
-@router.delete("/{book_id}", status_code=204)
-async def delete_book(book_id: str, service: BookService = Depends(get_book_service)):
-    """Видалити книгу"""
-    if not await service.delete_book(book_id):
-        raise HTTPException(status_code=404, detail="Книга не знайдена")
+    async def update_book(self, book_id: str, book: BookCreate) -> BookResponse:
+        """Оновити книгу"""
+        return await self.repository.update(book_id, book)
+
+    async def delete_book(self, book_id: str) -> bool:
+        """Видалити книгу"""
+        return await self.repository.delete(book_id)
