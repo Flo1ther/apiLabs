@@ -7,6 +7,10 @@ EXCLUDED_PATHS = [
     "/openapi.json",
     "/redoc",
     "/favicon.ico",
+    "/auth/login",
+    "/auth/register",
+    "/auth/refresh",
+    "/auth/test",
 ]
 
 
@@ -26,10 +30,10 @@ class RateLimiter:
         auth_header = request.headers.get("Authorization")
 
         if auth_header:
-            limit = 10
+            limit = 30
             key = f"rate_limit:user:{auth_header}"
         else:
-            limit = 2
+            limit = 10
             client_ip = request.client.host if request.client else "anonymous"
             key = f"rate_limit:anonymous:{client_ip}"
 

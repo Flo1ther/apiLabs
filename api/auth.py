@@ -1,6 +1,8 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
+from db.auth import AuthService
+
 router = APIRouter(
     prefix="/auth",
     tags=["auth"]
@@ -15,6 +17,10 @@ class UserRegister(BaseModel):
 class UserLogin(BaseModel):
     username: str
     password: str
+
+
+class RefreshRequest(BaseModel):
+    refresh_token: str
 
 
 @router.get("/test")
@@ -32,13 +38,43 @@ async def register(user: UserRegister):
 
 @router.post("/login")
 async def login(user: UserLogin):
-    if user.username == "admin" and user.password == "admin":
-        return {
-            "access_token": "test_token",
-            "token_type": "bearer"
-        }
 
-    raise HTTPException(
-        status_code=401,
-        detail="Невірний логін або пароль"
+    if user.username != "admin" or user.password != "admin":
+        raise HTTPException(
+            status_code=401,
+            detail="Невірний логін або пароль"
+        )
+
+    payload = {
+        "sub": user.username
+    }
+
+    access_token = AuthService.create_access_token(payload)
+
+    refresh_token = AuthService.create_refresh_token(payload)
+
+    return {
+        "access_token": access_token,
+        "refresh_token": refresh_token,
+        "token_type": "bearer"
+    }
+
+
+@router.post("/refresh")
+async def refresh_token(data: RefreshRequest):
+
+    payload = AuthService.verify_token(
+        token=data.refresh_token,
+        expected_type="refresh"
     )
+
+    username = payload.get("sub")
+
+    new_access_token = AuthService.create_access_token({
+        "sub": username
+    })
+
+    return {
+        "access_token": new_access_token,
+        "token_type": "bearer"
+    }
